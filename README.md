@@ -1,6 +1,163 @@
 # Hypertune
 
+## Installation 
+
+- Python 3.11+
+- PyTorch
+- Optuna
+- npfl138 library
+- torchmetrics (optional, for metrics)
+
 `pip install git+https://github.com/kubosis/NPFL_model_optimizer.git`
+
+## Overview
+
+This module provides a flexible and powerful framework for hyperparameter optimization using Optuna, designed to simplify the process of finding optimal model configurations.
+
+## Key Components
+
+### `ModelOptimizer` Class
+
+The `ModelOptimizer` is a wrapper around your npfl138 Trainable Module https://github.com/ufal/npfl138 model that adds advanced optimization, early stopping, and model checkpointing capabilities.
+
+## Basic Usage
+
+### Initialization
+
+```python
+from NPFL_model_optimizer import ModelOptimizer
+
+# Wrap your PyTorch model
+model = ModelOptimizer(
+    module=pytorch_model,
+    model_name="model_name",
+    early_stop=True,
+    patience=5,
+    metric="dev_loss",
+    direction="minimize"
+)
+```
+
+### Optimization Workflow
+
+1. Prepare your datasets
+2. Define metrics (optional)
+3. Register any custom parameters
+4. Call the `optimize` method
+
+```python
+# Prepare datasets
+train = DataLoader(CutMixDataset(AugmentedDataset(BaseDataset(cifar.train, base_train_transform))), 
+                   batch_size=args.batch_size, 
+                   shuffle=True)
+dev = BaseDataset(cifar.dev, base_eval_transform)
+
+# Define metrics (optional)
+metrics = {
+    "F1": torchmetrics.F1Score("multiclass", num_classes=10),
+    "accuracy": torchmetrics.Accuracy("multiclass", num_classes=10)
+}
+
+# Register custom parameters
+model.register("T_max", len(train) * 25)
+model.register("optim", model.optimizer)
+
+# Perform hyperparameter optimization
+model.optimize(
+    optuna_config_path="./config.yml",  # Path to Optuna configuration
+    optimized_metric="dev_accuracy",    # Metric to optimize
+    direction="maximize",               # Optimization direction
+    n_trials=50,                        # Number of trials
+    train=train,                        # Training dataset
+    dev=dev,                            # Validation dataset
+    metrics=metrics                     # Optional metrics
+)
+```
+
+## Configuration File (`config.yml`)
+
+The configuration file is a YAML-based specification that guides the hyperparameter optimization process.
+
+### Example Configuration
+
+```yaml
+self:
+    early_stop: true
+    patience: 5
+    batch_size: !categorical [64, 128, 256, 512]
+    module:
+        class: !class "{{resolve}}"
+        blocks: !categorical [[2,2,2,2], [3,3,3,3]]
+        convtype: !categorical ["ConvResidual", "ConvResidualWithBottleneck"]
+
+functional:
+    fit:
+        epochs: 25
+
+    configure:
+        optimizer:
+            class: !class "torch.optim.AdamW"
+            params: "!eval:model.module.parameters(recurse=True)"
+            lr: !float [5e-5, 1e-3]
+            weight_decay: !float [1e-5, 5e-4]
+
+        scheduler:
+            class: !class "torch.optim.lr_scheduler.CosineAnnealingLR"
+            optimizer: "^hook:optimizer"
+            T_max: !registered "T_max"
+            eta_min: !eval "trial.params.get('lr', 1e-4) / 100"
+
+        loss:
+            class: !class "torch.nn.CrossEntropyLoss"
+```
+
+## Advanced Features
+
+### Callbacks
+
+You can add custom callbacks to the training process:
+
+```python
+def custom_callback(model, epochs, logs):
+    # Custom logic
+    return False  # Return True to stop training
+
+model.fit(train, dev=dev, callbacks=[custom_callback])
+```
+
+### Loading Best Model
+
+```python
+# Load the best model found during optimization
+model.load_champion()
+```
+
+
+## Optimization Methods
+
+- Supports both minimization and maximization of metrics
+- Automatic early stopping
+- Model checkpointing
+- Gradient norm clipping
+
+## Potential Gotchas
+
+- Ensure metrics are compatible with Optuna
+- Configuration file must be carefully structured
+- Some advanced features require careful parameter registration
+
+## Troubleshooting
+
+- Check that all required libraries are installed
+- Verify dataset and model compatibility
+- Ensure configuration file is correctly formatted
+
+## Performance Tips
+
+- Start with a small number of trials
+- Use appropriate batch sizes
+- Monitor GPU memory usage
+- Consider using a subset of data for initial optimization
 
 ## Overview - how to configurate trainer
 The configuration file is a YAML-based specification that guides the hyperparameter optimization process for machine learning models using Optuna. It is divided into two main sections: `self` and `functional`.
