@@ -1,0 +1,26 @@
+self:
+    early_stop: true
+    patience: 5
+    batch_size: !categorical [64, 128, 256, 512, 1024]
+    module:
+        class: !class "{{resolve}}"  # Auto-resolve
+        blocks: !categorical [[2,2,2,2], [3,3,3,3], [2,3,2,3]]
+        convtype: !categorical ["ConvResidual", "ConvResidualWithBottleneck"]
+
+functional:
+    fit:
+        epochs: 25
+    configure:
+            optimizer:
+                class: !class "torch.optim.AdamW"
+                params: "!eval:model.module.parameters(recurse=True)" # post parse eval - after the self params are already constructed
+                lr: !float [5e-5, 1e-3]
+                weight_decay: !float [1e-5, 5e-4]
+            scheduler:
+                class: !class "torch.optim.lr_scheduler.CosineAnnealingLR"
+                optimizer: "^hook:optimizer" # hook to the parsed optimizer value, Note: hooks are only possible within same subdict (here: configure)
+                T_max: !registered "T_max"
+                eta_min: !eval "trial.params.get('lr', 1e-4) / 100"
+            loss:
+                class: !class "torch.nn.CrossEntropyLoss"
+

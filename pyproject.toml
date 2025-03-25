@@ -7,14 +7,14 @@ find = {}
 
 [project]
 name = "NPFL_model_optimizer"
-version = "0.0.1-pre-alpha"
+version = "0.0.1"
 description = ""
 readme = "README.md"
 requires-python = ">=3.10"
 keywords = []
 dynamic = ["dependencies"]
 authors = [
-    [{ "name"=kubos, "email"="" } ],
+    { "name"="Jakub Sukdol", "email"="kubasukdol@gmail.com" } ,
 ]
 
 classifiers = [
