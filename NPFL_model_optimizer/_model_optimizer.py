@@ -48,7 +48,7 @@ def safe_eval(expression, **kwargs):
     if re.search(r"\b(os|sys|subprocess|eval|exec|import|importlib)\b", expression):
         raise ValueError("Use of restricted modules/functions is not allowed")
     local_context = {**kwargs}
-    return eval(expression, {"__builtins__": {}}, local_context)
+    return eval(expression, globals(), local_context)
 
 def find_parent_key(buffer, start_index, line_no):
     """Find the closest parent key before 'start_index' based on indentation."""
@@ -82,7 +82,7 @@ def suggest_float_constructor(loader, node, trial):
 def suggest_int_constructor(loader, node, trial):
     value = list(map(lambda x: int(loader.construct_scalar(x)), node.value))
     name = find_key(node.start_mark.buffer, node.start_mark.line)
-    return trial.suggest_int(name, *list(map(int, value.strip("[]").split(","))))
+    return trial.suggest_int(name, *value)
 
 def is_float(s):
     try:
@@ -349,8 +349,8 @@ class ModelOptimizer(npfl138.TrainableModule):
                       trial: optuna.Trial,
                       metric: str,
                       optuna_config_stream: str,
-                      train: Dataset,
-                      dev: Dataset,
+                      train: DataLoader,
+                      dev: DataLoader,
                       metrics: Optional[dict],
                       pre_trial_hooks: Optional[list[Callable[[optuna.Trial, "ModelOptimizer"], None], ...]],
                       post_trial_hooks: Optional[list[Callable[[optuna.Trial, "ModelOptimizer"], None], ...]]
@@ -364,15 +364,16 @@ class ModelOptimizer(npfl138.TrainableModule):
 
         config = yaml.safe_load(optuna_config_stream)
         self_params = parse_config(config["self"], self)
+        self.__dict__.update(**self_params)
+
         fit_params = parse_config(config["functional"]["fit"], self)
         configure_params = parse_config(config["functional"]["configure"], self)
         self.unconfigure()
-        self.__dict__.update(**self_params)
         self.configure(metrics=metrics, **configure_params)
         self.module.to(self.device)
 
         for hook in pre_trial_hooks:
-            hook(trial, self)
+            hook(trial, self, train, dev)
 
         print(f"Trial {trial.number} params: {trial.params}")
         logs = self.fit(train, dev=dev, **fit_params)
