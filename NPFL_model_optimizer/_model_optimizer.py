@@ -376,7 +376,7 @@ class ModelOptimizer(npfl138.TrainableModule):
             hook(trial, self, train, dev)
 
         print(f"Trial {trial.number} params: {trial.params}")
-        logs = self.fit(train, dev=dev, **fit_params)
+        logs = self.fit(train, dev=dev, load_best_in_the_end=False, **fit_params)
 
         for hook in post_trial_hooks:
             hook(trial, self)
