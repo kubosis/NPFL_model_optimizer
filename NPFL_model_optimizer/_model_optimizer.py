@@ -362,9 +362,6 @@ class ModelOptimizer(npfl138.TrainableModule):
         yaml.SafeLoader.add_constructor("!eval", lambda l, n: eval_constructor(l, n, trial, self))
         yaml.SafeLoader.add_constructor("!class", lambda l, n: class_constructor(l, n, trial, self))
 
-        for hook in pre_trial_hooks:
-            hook(trial, self)
-
         config = yaml.safe_load(optuna_config_stream)
         self_params = parse_config(config["self"], self)
         fit_params = parse_config(config["functional"]["fit"], self)
@@ -373,6 +370,10 @@ class ModelOptimizer(npfl138.TrainableModule):
         self.__dict__.update(**self_params)
         self.configure(metrics=metrics, **configure_params)
         self.module.to(self.device)
+
+        for hook in pre_trial_hooks:
+            hook(trial, self)
+
         print(f"Trial {trial.number} params: {trial.params}")
         logs = self.fit(train, dev=dev, **fit_params)
 
