@@ -3,6 +3,8 @@
 # 3037cdec-8857-4d1e-8707-4b3916e39158
 
 import os
+from optparse import Option
+
 import yaml
 from pathlib import Path
 import importlib
@@ -18,13 +20,13 @@ import torch.nn as nn
 
 import optuna
 
-from typing import Final, TypeAlias, Any, Type, Optional, TypeVar, Literal
+from typing import Final, TypeAlias, Any, Type, Optional, TypeVar, Literal, Callable
 
 from yaml import YAMLError, ScalarNode
 
 Categorical: TypeAlias = Any
 HyperparamMapping: TypeAlias = dict[str, dict[str, Any]]
-Self: TypeVar = TypeVar("Self", bound="TrainerModel")
+Self: TypeVar = TypeVar("Self", bound="ModelOptimizer")
 
 if os.name == 'posix':
     hypertune_path = '~/.hypertune'
@@ -349,7 +351,9 @@ class ModelOptimizer(npfl138.TrainableModule):
                       optuna_config_stream: str,
                       train: Dataset,
                       dev: Dataset,
-                      metrics: Optional[dict]
+                      metrics: Optional[dict],
+                      pre_trial_hooks: Optional[list[Callable[[optuna.Trial, "ModelOptimizer"], None], ...]],
+                      post_trial_hooks: Optional[list[Callable[[optuna.Trial, "ModelOptimizer"], None], ...]]
                       ):
         yaml.SafeLoader.add_constructor("!float", lambda l, n: suggest_float_constructor(l, n, trial))
         yaml.SafeLoader.add_constructor("!int", lambda l, n: suggest_int_constructor(l, n, trial))
@@ -357,6 +361,9 @@ class ModelOptimizer(npfl138.TrainableModule):
         yaml.SafeLoader.add_constructor("!registered", lambda l, n: registered_constructor(l, n, self.register_dict))
         yaml.SafeLoader.add_constructor("!eval", lambda l, n: eval_constructor(l, n, trial, self))
         yaml.SafeLoader.add_constructor("!class", lambda l, n: class_constructor(l, n, trial, self))
+
+        for hook in pre_trial_hooks:
+            hook(trial, self)
 
         config = yaml.safe_load(optuna_config_stream)
         self_params = parse_config(config["self"], self)
@@ -368,6 +375,10 @@ class ModelOptimizer(npfl138.TrainableModule):
         self.module.to(self.device)
         print(f"Trial {trial.number} params: {trial.params}")
         logs = self.fit(train, dev=dev, **fit_params)
+
+        for hook in post_trial_hooks:
+            hook(trial, self)
+
         return logs[metric]
 
     def optimize(self,
@@ -377,7 +388,9 @@ class ModelOptimizer(npfl138.TrainableModule):
                  n_trials: int,
                  train: Dataset | DataLoader,
                  dev: Dataset | DataLoader,
-                 metrics: Optional[dict] = None):
+                 metrics: Optional[dict] = None,
+                 pre_trial_hooks: Optional[list[Callable[[optuna.Trial, "ModelOptimizer"], None], ...]] = None,
+                 post_trial_hooks: Optional[list[Callable[[optuna.Trial, "ModelOptimizer"], None], ...]] = None,):
         """
         Optimize wrapped model
 
@@ -392,10 +405,20 @@ class ModelOptimizer(npfl138.TrainableModule):
         :param train: (Dataset) train dataset
         :param dev: (Dataset) dev dataset
         :param metrics: (dict) metrics to log, has to contain optimized metric
+        :param pre_trial_hooks: (list) callable with trial and self params that are called in the beginning of each trial
+        :param post_trial_hooks: (list) callable with trial and self params that are called in the end of each trial
 
         :return: (TrainerModel) optimized model
+
+        Args:
+            pre_trial_hooks:
         """
         print("Welcome to Model Optimizer 1.0")
+
+        if pre_trial_hooks is None:
+            pre_trial_hooks = []
+        if post_trial_hooks is None:
+            post_trial_hooks = []
 
         self.metric = optimized_metric
         self.direction = direction
@@ -405,7 +428,7 @@ class ModelOptimizer(npfl138.TrainableModule):
 
         study = optuna.create_study(direction=self.direction)
         study.optimize(
-            lambda trial: self._optuna_trial(trial, self.metric, optuna_config_stream, train, dev, metrics),
+            lambda trial: self._optuna_trial(trial, self.metric, optuna_config_stream, train, dev, metrics, pre_trial_hooks, post_trial_hooks),
             n_trials=n_trials,
         )
 
