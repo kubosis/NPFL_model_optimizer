@@ -289,7 +289,7 @@ class ModelOptimizer(npfl138.TrainableModule):
 
         print(f"Saving best model yet (epoch: {self.epoch}) with metrics: {self.get_best_metrics()} to {self._path_model_weights.parent}")
         self.save_config(str(self._path_model_config))
-        self.save_weights(str(self._path_model_weights), str(self._path_model_optim))
+        self.save_weights(str(self._path_model_weights))
         os.makedirs(self._path_best_loss.parent, exist_ok=True)
         with open(self._path_best_loss, "w") as f:
             f.truncate(0)
