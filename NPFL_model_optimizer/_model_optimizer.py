@@ -149,6 +149,13 @@ def class_constructor(loader, node, trial, model) -> Any:
 
     return cls
 
+def parse_item(v: Any, constructed_kwargs: dict, model: "ModelOptimizer"):
+    if isinstance(v, str) and "^hook:" in v:
+        v = constructed_kwargs[v[6:]]
+    if isinstance(v, str) and "!eval:" in v:
+        v = safe_eval(v[6:], model=model)
+    return v
+
 def parse_class(cls_dict: dict, constructed_kwargs: dict, model: "ModelOptimizer"):
     class_kwargs = {}
     class_ = cls_dict.pop("class")
@@ -156,11 +163,7 @@ def parse_class(cls_dict: dict, constructed_kwargs: dict, model: "ModelOptimizer
         # optional classes like lr scheduler
         return None
     for k, v in cls_dict.items():
-        if isinstance(v, str) and "^hook:" in v:
-            v = constructed_kwargs[v[6:]]
-        if isinstance(v, str) and "!eval:" in v:
-            v = safe_eval(v[6:], model=model)
-        class_kwargs[k] = v
+        class_kwargs[k] = parse_item(v, constructed_kwargs, model)
     return class_(**class_kwargs)
 
 def parse_config(conf: dict, model: "ModelOptimizer"):
@@ -168,6 +171,8 @@ def parse_config(conf: dict, model: "ModelOptimizer"):
     for k, v in conf.items():
         if isinstance(v, dict) and "class" in v:
             v = parse_class(v, constructed_kwargs, model)
+        else:
+            v = parse_item(v, constructed_kwargs, model)
         constructed_kwargs[k] = v
     return constructed_kwargs
 # YAML optuna config parsion utils end -------------------------------------------------------------------
