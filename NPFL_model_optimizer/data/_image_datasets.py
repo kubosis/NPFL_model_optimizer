@@ -148,3 +148,5 @@ class CutMixDataset(torch.utils.data.Dataset):
             label1 = lam * label1 + (1 - lam) * label2
 
         return img1, label1
+
+# TODO add RandAugment
