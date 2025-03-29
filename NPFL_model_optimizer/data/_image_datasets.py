@@ -29,15 +29,16 @@ def rand_bbox(size, lam):
     return x1, y1, x2, y2
 
 class BaseDataset(npfl138.TransformedDataset):
-    def __init__(self, dataset, base_transform):
+    def __init__(self, dataset, base_transform, label_str="label"):
         super().__init__(dataset)
         self._transform = base_transform
+        self._label_str = label_str
 
     def transform(self, example):
         image = example["image"]
         image = image.to(torch.float32)
         image = self._transform(image)
-        label = example["label"]
+        label = example[self._label_str]
         return image, label  # return an (input, target) pair
 
 class AugmentedDataset(torch.utils.data.Dataset):
